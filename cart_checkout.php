@@ -5,14 +5,30 @@ if (!isset($_SESSION['cart'])) {
     $_SESSION['cart'] = [];
 }
 
-/* REMOVE ITEM */
-if (isset($_GET['remove'])) {
+/* REMOVE ITEM (with confirmation handled client-side) */
+if (isset($_POST['remove_item'])) {
+    $removeId = $_POST['remove_item'];
     foreach ($_SESSION['cart'] as $k => $v) {
-        if ($v['unique_id'] == $_GET['remove']) {
+        if ($v['unique_id'] == $removeId) {
             unset($_SESSION['cart'][$k]);
         }
     }
     $_SESSION['cart'] = array_values($_SESSION['cart']);
+    header("Location: cart_checkout.php");
+    exit();
+}
+
+/* UPDATE QUANTITIES */
+if (isset($_POST['update_cart'])) {
+    foreach ($_SESSION['cart'] as &$item) {
+        $key = 'qty_' . $item['unique_id'];
+        if (isset($_POST[$key])) {
+            $newQty = max(1, (int)$_POST[$key]);
+            $item['qty'] = $newQty;
+            $item['total'] = $item['price'] * $newQty;
+        }
+    }
+    unset($item);
     header("Location: cart_checkout.php");
     exit();
 }
@@ -25,14 +41,16 @@ foreach ($_SESSION['cart'] as $item) {
 
 /* PLACE ORDER */
 $orderSuccess = false;
+$orderData = null;
+$orderItems = [];
 
 if (isset($_POST['place_order']) && count($_SESSION['cart']) > 0) {
 
-    $name    = $_POST['name'];
-    $email   = $_POST['email'];
-    $phone   = $_POST['phone'];
-    $pincode = $_POST['pincode'];
-    $address = $_POST['address'];
+    $name    = trim($_POST['name']);
+    $email   = trim($_POST['email']);
+    $phone   = trim($_POST['phone']);
+    $pincode = trim($_POST['pincode']);
+    $address = trim($_POST['address']);
 
     /* INSERT INTO ORDERS */
     $orderSql = "INSERT INTO orders
@@ -45,16 +63,9 @@ if (isset($_POST['place_order']) && count($_SESSION['cart']) > 0) {
     }
 
     mysqli_stmt_bind_param(
-        $orderStmt,
-        "sssssd",
-        $name,
-        $email,
-        $phone,
-        $pincode,
-        $address,
-        $total
+        $orderStmt, "sssssd",
+        $name, $email, $phone, $pincode, $address, $total
     );
-
     mysqli_stmt_execute($orderStmt);
 
     $order_id = mysqli_insert_id($conn);
@@ -70,212 +81,241 @@ if (isset($_POST['place_order']) && count($_SESSION['cart']) > 0) {
         die("Item Prepare Failed: " . mysqli_error($conn));
     }
 
+    // Save items for confirmation display
+    $orderItems = $_SESSION['cart'];
+
     foreach ($_SESSION['cart'] as $item) {
         mysqli_stmt_bind_param(
-            $itemStmt,
-            "iiid",
-            $order_id,
-            $item['product_id'],
-            $item['qty'],
-            $item['price']
+            $itemStmt, "iiid",
+            $order_id, $item['product_id'], $item['qty'], $item['price']
         );
         mysqli_stmt_execute($itemStmt);
     }
 
     mysqli_stmt_close($itemStmt);
 
+    $orderData = [
+        'id'      => $order_id,
+        'name'    => $name,
+        'email'   => $email,
+        'phone'   => $phone,
+        'pincode' => $pincode,
+        'address' => $address,
+        'total'   => $total
+    ];
+
     $_SESSION['cart'] = [];
     $orderSuccess = true;
 }
+
+$cartCount = count($_SESSION['cart']);
 ?>
-
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<title>Cart & Checkout - Murugan Vedikadai</title>
-
-<style>
-body{
-    margin:0;
-    font-family: Arial, sans-serif;
-    background: linear-gradient(135deg,#fff3d6,#ffd966);
-}
-
-.header{
-    background:#8b0000;
-    color:gold;
-    padding:25px;
-    text-align:center;
-    font-size:36px;
-    font-weight:bold;
-}
-
-.container{
-    width:95%;
-    max-width:1100px;
-    margin:30px auto;
-    background:white;
-    padding:25px;
-    border-radius:15px;
-    box-shadow:0 10px 25px rgba(0,0,0,0.25);
-}
-
-table{
-    width:100%;
-    border-collapse:collapse;
-    font-size:22px;
-}
-
-th{
-    background:#c41e3d;
-    color:white;
-    padding:15px;
-    font-size:24px;
-}
-
-td{
-    padding:15px;
-    border-bottom:1px solid #ddd;
-    text-align:center;
-}
-
-.remove-btn{
-    background:#dc3545;
-    color:white;
-    padding:10px 16px;
-    text-decoration:none;
-    border-radius:8px;
-    font-size:18px;
-}
-
-.total-box{
-    text-align:right;
-    font-size:30px;
-    color:#008000;
-    margin-top:20px;
-    font-weight:bold;
-}
-
-.checkout-title{
-    text-align:center;
-    font-size:32px;
-    color:#8b0000;
-    margin:30px 0 15px;
-}
-
-input, textarea{
-    width:100%;
-    padding:14px;
-    font-size:20px;
-    margin-bottom:15px;
-    border-radius:8px;
-    border:1px solid #ccc;
-}
-
-.place-btn{
-    width:100%;
-    background:#28a745;
-    color:white;
-    padding:18px;
-    font-size:26px;
-    border:none;
-    border-radius:10px;
-    cursor:pointer;
-}
-
-.place-btn:hover{
-    background:#1e7e34;
-}
-
-.success{
-    text-align:center;
-    font-size:30px;
-    color:green;
-    font-weight:bold;
-}
-
-.back-btn{
-    display:inline-block;
-    margin-top:20px;
-    background:#0057ff;
-    color:white;
-    padding:12px 20px;
-    border-radius:8px;
-    text-decoration:none;
-    font-size:20px;
-}
-</style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cart &amp; Checkout - Murugan Vedikadai</title>
+<link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
 
-<div class="header">🛒 Your Shopping Cart</div>
-
-<div class="container">
-
-<?php if ($orderSuccess): ?>
-    <div class="success">
-        🎉 Order Placed Successfully! 🎉 <br><br>
-        Thank you for shopping with us 🙏
-        <br><br>
-        <a href="index1.php" class="back-btn">🏠 Back to Home</a>
+<!-- Navigation -->
+<nav class="site-nav" aria-label="Main navigation">
+  <div class="nav-inner">
+    <a href="index.php" class="nav-brand" aria-label="Home - Thiruchendur Murugan Vedikadai">
+      <img src="murugan_logo.png" alt="Murugan Vedikadai Logo">
+      <span class="nav-brand-text">
+        <span>Murugan Vedikadai</span>
+        <span class="nav-brand-ta" lang="ta">முருகன் வெடிகடை</span>
+      </span>
+    </a>
+    <div class="nav-links">
+      <a href="index.php" class="nav-link nav-link--admin">Shop</a>
+      <a href="cart_checkout.php" class="nav-link nav-link--cart" aria-label="Shopping cart, <?php echo $cartCount; ?> items">
+        Cart <span class="cart-badge"><?php echo $cartCount; ?></span>
+      </a>
     </div>
+  </div>
+</nav>
 
-<?php elseif (count($_SESSION['cart']) == 0): ?>
-    <div class="success">
-        Your cart is empty 😔 <br><br>
-        <a href="index1.php" class="back-btn">🛍️ Shop Now</a>
-    </div>
+<main class="container">
 
-<?php else: ?>
+<?php if ($orderSuccess && $orderData): ?>
+<!-- ========== ORDER CONFIRMATION ========== -->
+<div class="order-success">
+  <div class="order-success-icon" aria-hidden="true">&#x1F389;</div>
+  <h2>Order Placed Successfully!</h2>
+  <p class="order-number">Order #<?php echo (int)$orderData['id']; ?></p>
 
-<table>
-<tr>
-    <th>No</th>
-    <th>Product</th>
-    <th>Price</th>
-    <th>Qty</th>
-    <th>Total</th>
-    <th>Action</th>
-</tr>
+  <!-- Order Summary -->
+  <table class="order-summary-table">
+    <thead>
+      <tr>
+        <th>Product</th>
+        <th>Qty</th>
+        <th>Price</th>
+        <th>Total</th>
+      </tr>
+    </thead>
+    <tbody>
+      <?php foreach ($orderItems as $item): ?>
+      <tr>
+        <td><?php echo htmlspecialchars($item['name']); ?></td>
+        <td><?php echo (int)$item['qty']; ?></td>
+        <td><?php echo CURRENCY_SYMBOL . ' ' . number_format($item['price'], 2); ?></td>
+        <td><?php echo CURRENCY_SYMBOL . ' ' . number_format($item['price'] * $item['qty'], 2); ?></td>
+      </tr>
+      <?php endforeach; ?>
+      <tr>
+        <td colspan="3" style="text-align:right;font-weight:700;">Grand Total</td>
+        <td style="font-weight:700;color:#28a745;"><?php echo CURRENCY_SYMBOL . ' ' . number_format($orderData['total'], 2); ?></td>
+      </tr>
+    </tbody>
+  </table>
 
-<?php foreach ($_SESSION['cart'] as $i => $item): ?>
-<tr>
-    <td><?php echo $i+1; ?></td>
-    <td><?php echo $item['name']; ?></td>
-    <td>₹ <?php echo number_format($item['price'],2); ?></td>
-    <td><?php echo $item['qty']; ?></td>
-    <td>₹ <?php echo number_format($item['price']*$item['qty'],2); ?></td>
-    <td>
-        <a href="?remove=<?php echo $item['unique_id']; ?>" class="remove-btn">Remove</a>
-    </td>
-</tr>
-<?php endforeach; ?>
-</table>
+  <!-- Delivery Info -->
+  <div class="order-delivery-info">
+    <h3>Delivery Details</h3>
+    <p><strong>Name:</strong> <?php echo htmlspecialchars($orderData['name']); ?></p>
+    <p><strong>Phone:</strong> <?php echo htmlspecialchars($orderData['phone']); ?></p>
+    <p><strong>Email:</strong> <?php echo htmlspecialchars($orderData['email']); ?></p>
+    <p><strong>Pincode:</strong> <?php echo htmlspecialchars($orderData['pincode']); ?></p>
+    <p><strong>Address:</strong> <?php echo htmlspecialchars($orderData['address']); ?></p>
+  </div>
 
-<div class="total-box">
-    Grand Total: ₹ <?php echo number_format($total,2); ?>
+  <p style="color:#666;margin-bottom:20px;">
+    For order inquiries, contact us at <a href="tel:+918610466629">+91 86104 66629</a>
+  </p>
+
+  <a href="index.php" class="btn btn--primary btn--lg">Continue Shopping</a>
 </div>
 
-<div class="checkout-title">🚚 Delivery Details</div>
+<?php elseif ($cartCount === 0): ?>
+<!-- ========== EMPTY CART ========== -->
+<div class="empty-state">
+  <div class="empty-state-icon" aria-hidden="true">&#x1F6D2;</div>
+  <h2>Your cart is empty</h2>
+  <p>Add some crackers to your cart and come back!</p>
+  <a href="index.php" class="btn btn--primary btn--lg mt-2">Shop Now</a>
+</div>
 
-<form method="POST">
-    <input type="text" name="name" placeholder="Full Name" required>
-    <input type="email" name="email" placeholder="Email" required>
-    <input type="text" name="phone" placeholder="Phone Number" required>
-    <input type="text" name="pincode" placeholder="Pincode" required>
-    <textarea name="address" placeholder="Full Address" rows="4" required></textarea>
+<?php else: ?>
+<!-- ========== CART ITEMS ========== -->
+<h2 style="margin:0 0 16px;font-size:1.3rem;color:#8b0000;">Your Cart (<?php echo $cartCount; ?> items)</h2>
 
-    <button type="submit" name="place_order" class="place-btn">
-        🧾 Place Order Now
-    </button>
+<form method="POST" id="cart-form">
+  <div class="cart-items">
+    <?php foreach ($_SESSION['cart'] as $i => $item): ?>
+    <div class="cart-item">
+      <img src="<?php echo htmlspecialchars($item['image']); ?>"
+           alt="<?php echo htmlspecialchars($item['name']); ?>"
+           class="cart-item-img"
+           onerror="this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 70 70%22><rect fill=%22%23f0f0f0%22 width=%2270%22 height=%2270%22/><text x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23999%22 font-size=%2210%22>No Img</text></svg>'">
+
+      <div>
+        <div class="cart-item-name"><?php echo htmlspecialchars($item['name']); ?></div>
+        <div class="cart-item-price"><?php echo CURRENCY_SYMBOL . ' ' . number_format($item['price'], 2); ?> each</div>
+      </div>
+
+      <div class="cart-item-qty">
+        <label for="qty_<?php echo $item['unique_id']; ?>" class="sr-only">Quantity</label>
+        <input type="number" id="qty_<?php echo $item['unique_id']; ?>"
+               name="qty_<?php echo $item['unique_id']; ?>"
+               value="<?php echo (int)$item['qty']; ?>" min="1"
+               class="qty-input"
+               aria-label="Quantity for <?php echo htmlspecialchars($item['name']); ?>">
+      </div>
+
+      <div class="cart-item-total">
+        <?php echo CURRENCY_SYMBOL . ' ' . number_format($item['price'] * $item['qty'], 2); ?>
+      </div>
+
+      <button type="submit" name="remove_item" value="<?php echo htmlspecialchars($item['unique_id']); ?>"
+              class="btn btn--danger" onclick="return confirm('Remove this item from cart?')">
+        Remove
+      </button>
+    </div>
+    <?php endforeach; ?>
+  </div>
+
+  <div class="cart-summary">
+    <div class="cart-total-row">
+      <span>Grand Total</span>
+      <span class="cart-total-amount"><?php echo CURRENCY_SYMBOL . ' ' . number_format($total, 2); ?></span>
+    </div>
+    <button type="submit" name="update_cart" class="btn btn--info btn--block mt-2">Update Cart</button>
+  </div>
 </form>
 
-<a href="index1.php" class="back-btn">⬅ Continue Shopping</a>
+<!-- ========== CHECKOUT FORM ========== -->
+<section class="checkout-section">
+  <h2>Delivery Details</h2>
+
+  <form method="POST" id="checkout-form">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="checkout-name">Full Name</label>
+        <input type="text" id="checkout-name" name="name" class="form-input" required
+               autocomplete="name" minlength="2" placeholder="Your full name">
+      </div>
+      <div class="form-group">
+        <label for="checkout-email">Email</label>
+        <input type="email" id="checkout-email" name="email" class="form-input" required
+               autocomplete="email" placeholder="your@email.com">
+      </div>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label for="checkout-phone">Phone Number</label>
+        <input type="tel" id="checkout-phone" name="phone" class="form-input" required
+               autocomplete="tel" pattern="[6-9][0-9]{9}" maxlength="10"
+               placeholder="10-digit mobile number">
+      </div>
+      <div class="form-group">
+        <label for="checkout-pincode">Pincode</label>
+        <input type="text" id="checkout-pincode" name="pincode" class="form-input" required
+               autocomplete="postal-code" pattern="[0-9]{6}" maxlength="6"
+               placeholder="6-digit pincode">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label for="checkout-address">Full Address</label>
+      <textarea id="checkout-address" name="address" class="form-input" required
+                rows="3" minlength="10" autocomplete="street-address"
+                placeholder="House no, street, area, city, state"></textarea>
+    </div>
+
+    <button type="submit" name="place_order" class="btn btn--primary btn--block btn--lg"
+            id="place-order-btn">
+      Place Order Now
+    </button>
+  </form>
+</section>
+
+<a href="index.php" class="btn btn--outline mt-3">Continue Shopping</a>
 
 <?php endif; ?>
 
-</div>
+</main>
+
+<script>
+/* Prevent double-submit on Place Order */
+(function() {
+  var form = document.getElementById('checkout-form');
+  if (!form) return;
+  form.addEventListener('submit', function() {
+    var btn = document.getElementById('place-order-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Placing Order...';
+    }
+  });
+})();
+</script>
 
 </body>
 </html>

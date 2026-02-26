@@ -32,131 +32,52 @@ if (isset($_POST['login'])) {
             exit();
         }
     }
-    $error = "❌ Invalid username or password";
+    $error = "Invalid username or password";
 }
 ?>
-
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Admin Login | Murugan Vedikadai</title>
-
-<style>
-body{
-    margin:0;
-    font-family: Arial, sans-serif;
-    background: radial-gradient(circle at top, #ffcc00, #8b0000);
-    height:100vh;
-    display:flex;
-    align-items:center;
-    justify-content:center;
-}
-
-.login-box{
-    width:420px;
-    background:#fff7e6;
-    padding:35px;
-    border-radius:18px;
-    box-shadow:0 15px 40px rgba(0,0,0,0.35);
-    text-align:center;
-    border:4px solid gold;
-}
-
-.logo{
-    font-size:36px;
-    font-weight:bold;
-    color:#8b0000;
-    margin-bottom:5px;
-}
-
-.sub-logo{
-    font-size:20px;
-    color:#444;
-    margin-bottom:20px;
-}
-
-h2{
-    font-size:32px;
-    color:#c41e3d;
-    margin-bottom:15px;
-}
-
-input{
-    width:100%;
-    padding:16px;
-    font-size:22px;
-    margin:14px 0;
-    border-radius:10px;
-    border:2px solid #ccc;
-}
-
-input:focus{
-    border-color:#ff9800;
-    outline:none;
-}
-
-button{
-    width:100%;
-    padding:18px;
-    font-size:26px;
-    background:linear-gradient(135deg,#ff9800,#ff5722);
-    border:none;
-    color:white;
-    font-weight:bold;
-    border-radius:12px;
-    cursor:pointer;
-    margin-top:10px;
-}
-
-button:hover{
-    background:linear-gradient(135deg,#ff5722,#e65100);
-}
-
-.error{
-    color:#b00020;
-    font-size:20px;
-    margin-bottom:10px;
-    font-weight:bold;
-}
-
-.hint{
-    font-size:18px;
-    margin-top:15px;
-    color:#333;
-    background:#fff3cd;
-    padding:12px;
-    border-radius:10px;
-    border:1px dashed #ff9800;
-}
-</style>
+<link rel="stylesheet" href="styles.css">
 </head>
 
-<body>
+<body class="login-page">
 
-<div class="login-box">
+<main class="login-card" role="main">
+  <h1>Admin Panel</h1>
+  <p class="subtitle">Thiruchendur Murugan Vedikadai</p>
 
-    <div class="logo">🔐 ADMIN PANEL</div>
-    <div class="sub-logo">Thiruchendur Murugan Vedikadai</div>
+  <h2>Login</h2>
 
-    <h2>Login</h2>
+  <?php if ($error): ?>
+    <div class="login-error" role="alert"><?php echo htmlspecialchars($error); ?></div>
+  <?php endif; ?>
 
-    <?php if ($error): ?>
-        <div class="error"><?php echo $error; ?></div>
-    <?php endif; ?>
+  <form method="POST" novalidate>
+    <div class="form-group">
+      <label for="login-username">Username</label>
+      <input type="text" id="login-username" name="username" class="form-input"
+             required autofocus autocomplete="username" placeholder="Admin username">
+    </div>
 
-    <form method="POST">
-        <input type="text" name="username" placeholder="👤 Admin Username" required autofocus>
-        <input type="password" name="password" placeholder="🔑 Password" required>
+    <div class="form-group">
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" name="password" class="form-input"
+             required autocomplete="current-password" placeholder="Password">
+    </div>
 
-        <button type="submit" name="login">
-            🔓 LOGIN
-        </button>
-    </form>
+    <button type="submit" name="login" class="btn btn--accent btn--block btn--lg mt-1">
+      Login
+    </button>
+  </form>
 
-   
-
-</div>
+  <p class="mt-2" style="font-size:0.85rem;color:#666;">
+    <a href="index.php" style="color:var(--primary);">Back to Shop</a>
+  </p>
+</main>
 
 </body>
 </html>

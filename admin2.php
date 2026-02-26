@@ -10,16 +10,21 @@ if (!isset($_SESSION['admin_logged_in']) || $_SESSION['admin_logged_in'] !== tru
 $uploadDir = "uploads/";
 if (!is_dir($uploadDir)) mkdir($uploadDir, 0755, true);
 
-/* DELETE product */
-if (isset($_GET['delete'])) {
-    $id = (int)$_GET['delete'];
-    $imgRes = mysqli_query($conn, "SELECT image FROM products WHERE id = $id");
+/* DELETE product (now via POST for safety) */
+if (isset($_POST['delete_product'])) {
+    $id = (int)$_POST['delete_product'];
+    $stmt = mysqli_prepare($conn, "SELECT image FROM products WHERE id = ?");
+    mysqli_stmt_bind_param($stmt, "i", $id);
+    mysqli_stmt_execute($stmt);
+    $imgRes = mysqli_stmt_get_result($stmt);
     if ($imgRow = mysqli_fetch_assoc($imgRes)) {
         if (!empty($imgRow['image']) && file_exists($imgRow['image'])) {
             unlink($imgRow['image']);
         }
     }
-    mysqli_query($conn, "DELETE FROM products WHERE id = $id");
+    $delStmt = mysqli_prepare($conn, "DELETE FROM products WHERE id = ?");
+    mysqli_stmt_bind_param($delStmt, "i", $id);
+    mysqli_stmt_execute($delStmt);
     header("Location: admin2.php");
     exit();
 }
@@ -29,262 +34,154 @@ $products = [];
 $res = mysqli_query($conn, "SELECT * FROM products ORDER BY id DESC");
 while ($r = mysqli_fetch_assoc($res)) $products[] = $r;
 ?>
-
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Admin Panel | Murugan Vedikadai</title>
-
-<style>
-body{
-    margin:0;
-    font-family: Arial, sans-serif;
-    background: linear-gradient(135deg,#fff3d6,#ffd966);
-}
-
-.header{
-    background:#8b0000;
-    color:gold;
-    padding:30px;
-    text-align:center;
-    font-size:36px;
-    font-weight:bold;
-    letter-spacing:1px;
-}
-
-.container{
-    width:95%;
-    max-width:1600px;
-    margin:30px auto;
-    background:#fff;
-    padding:30px;
-    border-radius:18px;
-    box-shadow:0 15px 35px rgba(0,0,0,0.25);
-}
-
-.top-actions{
-    display:flex;
-    justify-content:space-between;
-    align-items:center;
-    margin-bottom:25px;
-    font-size:22px;
-    font-weight:bold;
-}
-
-.top-actions a{
-    text-decoration:none;
-    padding:12px 18px;
-    border-radius:10px;
-    color:white;
-    margin-left:10px;
-}
-
-.shop-btn{ background:#0057ff; }
-.order-btn{ background:#28a745; }
-.logout-btn{ background:#c82333; }
-
-h2{
-    font-size:32px;
-    color:#8b0000;
-    margin-bottom:20px;
-    text-align:center;
-}
-
-.form-grid{
-    display:grid;
-    grid-template-columns:1fr 1fr;
-    gap:18px;
-}
-
-label{
-    font-size:22px;
-    font-weight:bold;
-    color:#333;
-}
-
-input[type=text],
-input[type=number],
-input[type=file]{
-    width:100%;
-    padding:16px;
-    font-size:22px;
-    border-radius:10px;
-    border:2px solid #ccc;
-}
-
-input[readonly]{ background:#f0f0f0; }
-
-.add-btn{
-    width:100%;
-    margin-top:25px;
-    padding:20px;
-    font-size:28px;
-    background:linear-gradient(135deg,#ff9800,#ff5722);
-    color:white;
-    border:none;
-    border-radius:14px;
-    font-weight:bold;
-    cursor:pointer;
-}
-
-h3{
-    margin-top:40px;
-    font-size:30px;
-    color:#8b0000;
-}
-
-table{
-    width:100%;
-    border-collapse:collapse;
-    margin-top:15px;
-    font-size:22px;
-}
-
-th{
-    background:#8b0000;
-    color:white;
-    padding:16px;
-    font-size:24px;
-}
-
-td{
-    padding:16px;
-    border-bottom:1px solid #ddd;
-    text-align:center;
-}
-
-img.thumb{
-    width:90px;
-    height:90px;
-    object-fit:cover;
-    border-radius:10px;
-    border:3px solid #eee;
-}
-
-.delete-btn{
-    background:#dc3545;
-    color:white;
-    padding:12px 18px;
-    border-radius:10px;
-    text-decoration:none;
-    font-size:20px;
-    font-weight:bold;
-}
-</style>
-
-<script>
-function calculateOfferPrice() {
-    const oldP = parseFloat(document.getElementById('old_price').value) || 0;
-    let offer = parseFloat(document.getElementById('offer').value) || 0;
-    if (offer < 0) offer = 0;
-    if (offer > 100) offer = 100;
-    const newP = oldP - (oldP * offer / 100);
-    document.getElementById('new_price').value = newP.toFixed(2);
-}
-</script>
+<link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
 
-<div class="header">
-    🧨 Murugan Vedikadai – Admin Panel
-</div>
-
-<div class="container">
-
-    <div class="top-actions">
-        <div>👨‍💼 Welcome, Admin</div>
-        <div>
-            <a href="index1.php" class="shop-btn">🏪 View Shop</a>
-            <a href="admin_orders.php" class="order-btn">📦 View Orders</a>
-            <a href="logout.php" class="logout-btn">🚪 Logout</a>
-        </div>
+<!-- Admin Navigation -->
+<nav class="admin-nav" aria-label="Admin navigation">
+  <div class="admin-nav-inner">
+    <span class="admin-nav-title">Murugan Vedikadai — Admin</span>
+    <div class="admin-nav-links">
+      <a href="index.php" class="nav-link">Shop</a>
+      <a href="admin_orders.php" class="nav-link btn--primary" style="background:var(--success);">Orders</a>
+      <a href="logout.php" class="nav-link" style="background:var(--danger);">Logout</a>
     </div>
+  </div>
+</nav>
 
-    <h2>➕ Add New Cracker Product</h2>
+<main class="admin-container">
 
-    <form method="POST" action="save_product.php" enctype="multipart/form-data">
-        <div class="form-grid">
-            <div>
-                <label>English Name</label>
-                <input type="text" name="name_en" required>
-            </div><br>
+  <!-- Add Product Form -->
+  <div class="admin-card">
+    <h2>Add New Product</h2>
 
-            <div>
-                <label>Tamil Name</label>
-                <input type="text" name="name_ta" required>
-            </div><br>
+    <form method="POST" action="save_product.php" enctype="multipart/form-data" id="add-product-form">
+      <div class="admin-form-grid">
+        <div class="form-group">
+          <label for="prod-name-en">English Name</label>
+          <input type="text" id="prod-name-en" name="name_en" class="form-input" required>
+        </div>
+        <div class="form-group">
+          <label for="prod-name-ta">Tamil Name</label>
+          <input type="text" id="prod-name-ta" name="name_ta" class="form-input" required>
+        </div>
+        <div class="form-group">
+          <label for="prod-pack">Pack Details</label>
+          <input type="text" id="prod-pack" name="pack" class="form-input" required>
+        </div>
+        <div class="form-group">
+          <label for="old_price">Old Price (<?php echo CURRENCY_SYMBOL; ?>)</label>
+          <input type="number" id="old_price" name="old_price" class="form-input"
+                 step="0.01" min="0" oninput="calculateOfferPrice()" required>
+        </div>
+        <div class="form-group">
+          <label for="offer">Offer (%)</label>
+          <input type="number" id="offer" name="offer" class="form-input"
+                 min="0" max="100" oninput="calculateOfferPrice()" required>
+        </div>
+        <div class="form-group">
+          <label for="new_price">New Price (Auto)</label>
+          <input type="number" id="new_price" name="new_price" class="form-input"
+                 step="0.01" readonly required>
+        </div>
+        <div class="form-group" style="grid-column: 1 / -1;">
+          <label for="prod-image">Product Image</label>
+          <input type="file" id="prod-image" name="image" class="form-input"
+                 accept="image/jpeg,image/png,image/webp" required>
+        </div>
+      </div>
 
-            <div>
-                <label>Pack Details</label>
-                <input type="text" name="pack" required>
-            </div><br>
+      <button type="submit" class="btn btn--accent btn--block btn--lg mt-2" id="save-product-btn">
+        Save Product
+      </button>
+    </form>
+  </div>
 
-            <div>
-                <label>Old Price (₹)</label>
-                <input type="number" id="old_price" name="old_price" step="0.01"
-                       oninput="calculateOfferPrice()" required>
-            </div><br>
+  <!-- Product List -->
+  <div class="admin-card">
+    <h2>Existing Products (<?php echo count($products); ?>)</h2>
 
-            <div>
-                <label>Offer (%)</label>
-                <input type="number" id="offer" name="offer"
-                       oninput="calculateOfferPrice()" required>
-            </div><br>
+    <?php if (empty($products)): ?>
+    <div class="empty-state">
+      <div class="empty-state-icon" aria-hidden="true">&#x1F4E6;</div>
+      <h2>No products yet</h2>
+      <p>Use the form above to add your first product.</p>
+    </div>
+    <?php else: ?>
+    <div class="admin-product-list">
+      <?php foreach ($products as $p): ?>
+      <div class="admin-product-item">
+        <?php if ($p['image']): ?>
+          <img src="<?php echo htmlspecialchars($p['image']); ?>"
+               alt="<?php echo htmlspecialchars($p['name_en']); ?>"
+               class="admin-product-thumb"
+               onerror="this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 70 70%22><rect fill=%22%23f0f0f0%22 width=%2270%22 height=%2270%22/><text x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23999%22 font-size=%2210%22>No Img</text></svg>'">
+        <?php else: ?>
+          <div class="admin-product-thumb" style="background:#f0f0f0;display:flex;align-items:center;justify-content:center;font-size:0.7rem;color:#999;">No Img</div>
+        <?php endif; ?>
 
-            <div>
-                <label>New Price (Auto)</label>
-                <input type="number" id="new_price" name="new_price"
-                       step="0.01" readonly required>
-            </div><br>
-
-            <div>
-                <label>Product Image</label>
-                <input type="file" name="image" accept="image/*" required>
-            </div><br>
+        <div class="admin-product-info">
+          <strong><?php echo htmlspecialchars($p['name_en']); ?></strong>
+          <small lang="ta"><?php echo htmlspecialchars($p['name_ta']); ?></small>
+          <small>Pack: <?php echo htmlspecialchars($p['pack']); ?></small>
         </div>
 
-        <button type="submit" class="add-btn">💾 SAVE PRODUCT</button>
-    </form>
+        <div class="admin-product-price">
+          <div style="text-decoration:line-through;color:#999;font-size:0.8rem;">
+            <?php echo CURRENCY_SYMBOL . number_format($p['old_price'], 2); ?>
+          </div>
+          <div style="color:var(--danger);font-size:0.8rem;"><?php echo intval($p['offer']); ?>% OFF</div>
+          <div style="color:var(--success);font-weight:700;">
+            <?php echo CURRENCY_SYMBOL . number_format($p['new_price'], 2); ?>
+          </div>
+        </div>
 
-    <h3>📦 Existing Products (<?php echo count($products); ?>)</h3>
+        <form method="POST" style="margin:0;">
+          <button type="submit" name="delete_product" value="<?php echo (int)$p['id']; ?>"
+                  class="btn btn--danger"
+                  onclick="return confirm('Delete this product?')">
+            Delete
+          </button>
+        </form>
+      </div>
+      <?php endforeach; ?>
+    </div>
+    <?php endif; ?>
+  </div>
 
-    <table>
-        <tr>
-            <th>ID</th>
-            <th>Image</th>
-            <th>English</th>
-            <th>Tamil</th>
-            <th>Pack</th>
-            <th>Old</th>
-            <th>Offer</th>
-            <th>New</th>
-            <th>Action</th>
-        </tr>
+</main>
 
-        <?php foreach ($products as $p): ?>
-        <tr>
-            <td><?php echo $p['id']; ?></td>
-            <td><?php if ($p['image']): ?><img src="<?php echo $p['image']; ?>" class="thumb"><?php endif; ?></td>
-            <td><?php echo htmlspecialchars($p['name_en']); ?></td>
-            <td><?php echo htmlspecialchars($p['name_ta']); ?></td>
-            <td><?php echo htmlspecialchars($p['pack']); ?></td>
-            <td><?php echo CURRENCY_SYMBOL . number_format($p['old_price'],2); ?></td>
-            <td><?php echo intval($p['offer']); ?>%</td>
-            <td><?php echo CURRENCY_SYMBOL . number_format($p['new_price'],2); ?></td>
-            <td>
-                <a href="admin2.php?delete=<?php echo $p['id']; ?>"
-                   class="delete-btn"
-                   onclick="return confirm('Delete this product?')">
-                   🗑 Delete
-                </a>
-            </td>
-        </tr>
-        <?php endforeach; ?>
-    </table>
+<script>
+function calculateOfferPrice() {
+  var oldP = parseFloat(document.getElementById('old_price').value) || 0;
+  var offer = parseFloat(document.getElementById('offer').value) || 0;
+  if (offer < 0) offer = 0;
+  if (offer > 100) offer = 100;
+  var newP = oldP - (oldP * offer / 100);
+  document.getElementById('new_price').value = newP.toFixed(2);
+}
 
-</div>
+/* Prevent double-submit */
+(function() {
+  var form = document.getElementById('add-product-form');
+  if (!form) return;
+  form.addEventListener('submit', function() {
+    var btn = document.getElementById('save-product-btn');
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+    }
+  });
+})();
+</script>
 
 </body>
 </html>
