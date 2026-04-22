@@ -5,6 +5,38 @@ if (!isset($_SESSION['cart'])) {
     $_SESSION['cart'] = [];
 }
 
+/* BULK ADD FROM SHOP PAGE — rebuilds cart from submitted qty map */
+if (isset($_POST['bulk_add_to_cart']) && isset($_POST['qty']) && is_array($_POST['qty'])) {
+    $_SESSION['cart'] = [];
+    foreach ($_POST['qty'] as $pid => $q) {
+        $pid = (int)$pid;
+        $q   = (int)$q;
+        if ($pid <= 0 || $q <= 0) continue;
+
+        $stmt = mysqli_prepare(
+            $conn,
+            "SELECT id, name_en, name_ta, new_price, image FROM products WHERE id = ? LIMIT 1"
+        );
+        mysqli_stmt_bind_param($stmt, "i", $pid);
+        mysqli_stmt_execute($stmt);
+        $res = mysqli_stmt_get_result($stmt);
+        if ($p = mysqli_fetch_assoc($res)) {
+            $_SESSION['cart'][] = [
+                'product_id' => (int)$p['id'],
+                'name'       => $p['name_en'],
+                'price'      => (float)$p['new_price'],
+                'image'      => $p['image'],
+                'qty'        => $q,
+                'total'      => (float)$p['new_price'] * $q,
+                'unique_id'  => time() . rand(100, 999) . $pid
+            ];
+        }
+        mysqli_stmt_close($stmt);
+    }
+    header("Location: cart_checkout.php");
+    exit();
+}
+
 /* REMOVE ITEM (with confirmation handled client-side) */
 if (isset($_POST['remove_item'])) {
     $removeId = $_POST['remove_item'];
@@ -301,6 +333,33 @@ $cartCount = count($_SESSION['cart']);
 <?php endif; ?>
 
 </main>
+
+<!-- Footer -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-col">
+      <h3>Murugan Vedikadai</h3>
+      <p class="footer-ta" lang="ta">திருச்செந்தூர் முருகன் வெடிகடை</p>
+      <p>Quality crackers at the best prices for every celebration.</p>
+    </div>
+    <div class="footer-col">
+      <h3>Contact</h3>
+      <p><a href="tel:+918610466629">+91 86104 66629</a></p>
+      <p><a href="mailto:thiruchendurmuruganvedikadai@gmail.com">thiruchendurmuruganvedikadai@gmail.com</a></p>
+    </div>
+    <div class="footer-col">
+      <h3>Quick Links</h3>
+      <ul class="footer-links">
+        <li><a href="index.php">Shop</a></li>
+        <li><a href="cart_checkout.php">Cart</a></li>
+        <li><a href="admin_login.php">Admin</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <p>&copy; <?php echo date('Y'); ?> Thiruchendur Murugan Vedikadai. All rights reserved.</p>
+  </div>
+</footer>
 
 <script>
 /* Prevent double-submit on Place Order */

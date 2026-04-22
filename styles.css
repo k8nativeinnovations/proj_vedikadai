@@ -325,6 +325,222 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   text-align: center;
 }
 
+/* --- Quantity Stepper (product card) --- */
+.qty-stepper {
+  margin-top: auto;
+  display: flex;
+  align-items: stretch;
+  justify-content: center;
+  gap: 0;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+.qty-stepper .qty-btn {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  border: 2px solid var(--primary);
+  background: var(--primary);
+  color: var(--text-light);
+  font-size: 1.25rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, transform 0.1s;
+  user-select: none;
+  padding: 0;
+  line-height: 1;
+}
+
+.qty-stepper .qty-btn:hover {
+  background: var(--primary-dark);
+  border-color: var(--primary-dark);
+}
+
+.qty-stepper .qty-btn:active {
+  transform: scale(0.94);
+}
+
+.qty-stepper .qty-minus {
+  border-top-left-radius: var(--radius-sm);
+  border-bottom-left-radius: var(--radius-sm);
+}
+
+.qty-stepper .qty-plus {
+  border-top-right-radius: var(--radius-sm);
+  border-bottom-right-radius: var(--radius-sm);
+}
+
+.qty-stepper .product-qty {
+  width: 64px;
+  flex: 0 0 64px;
+  height: 40px;
+  border: 2px solid var(--primary);
+  border-left: none;
+  border-right: none;
+  font-size: 1rem;
+  font-weight: 700;
+  text-align: center;
+  border-radius: 0;
+  -moz-appearance: textfield;
+  padding: 0;
+}
+
+.qty-stepper .product-qty::-webkit-outer-spin-button,
+.qty-stepper .product-qty::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  appearance: none;
+  margin: 0;
+}
+
+.product-card-subtotal {
+  text-align: center;
+  margin-top: 8px;
+  min-height: 1.2em;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.product-card-subtotal strong {
+  color: var(--success);
+}
+
+.product-card.is-active {
+  box-shadow: 0 0 0 2px var(--success), var(--shadow);
+}
+
+/* --- Sticky Total Bars (Top & Bottom) --- */
+.total-bar {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+  color: var(--text-light);
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  z-index: 900;
+}
+
+.total-bar--top {
+  position: sticky;
+  top: var(--nav-height);
+}
+
+.total-bar--bottom {
+  position: sticky;
+  bottom: 0;
+}
+
+.total-bar-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 16px;
+  flex-wrap: wrap;
+}
+
+.total-bar-items,
+.total-bar-amount {
+  font-size: 0.95rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.total-bar-items strong {
+  color: var(--accent-light);
+  font-size: 1.05rem;
+}
+
+.total-bar-amount strong {
+  color: var(--accent-light);
+  font-size: 1.15rem;
+}
+
+.total-bar-btn {
+  padding: 8px 20px;
+  font-size: 0.95rem;
+  min-width: 130px;
+}
+
+.total-bar-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* --- Site Footer --- */
+.site-footer {
+  background: var(--text-dark);
+  color: #ddd;
+  margin-top: 40px;
+  padding: 36px 16px 0;
+}
+
+.footer-inner {
+  max-width: 1200px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  padding-bottom: 24px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.footer-col h3 {
+  color: var(--accent);
+  font-size: 1.05rem;
+  margin: 0 0 12px;
+  font-weight: 700;
+}
+
+.footer-col p {
+  margin: 0 0 8px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.footer-col a {
+  color: #ddd;
+  transition: color 0.15s;
+}
+
+.footer-col a:hover {
+  color: var(--accent-light);
+}
+
+.footer-ta {
+  color: var(--accent-light);
+  font-size: 0.95rem !important;
+}
+
+.footer-links {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.footer-links li {
+  margin-bottom: 8px;
+}
+
+.footer-links a {
+  font-size: 0.9rem;
+}
+
+.footer-bottom {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 16px 0;
+  text-align: center;
+  font-size: 0.85rem;
+  color: #999;
+}
+
+.footer-bottom p {
+  margin: 0;
+}
+
 .btn {
   display: inline-flex;
   align-items: center;
@@ -976,8 +1192,33 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .hero-contact { font-size: 0.8rem; }
 
   .product-grid {
-    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 12px;
+  }
+
+  .total-bar-inner {
+    padding: 8px 12px;
+    gap: 8px;
+  }
+
+  .total-bar-items,
+  .total-bar-amount {
+    font-size: 0.85rem;
+  }
+
+  .total-bar-items strong { font-size: 0.95rem; }
+  .total-bar-amount strong { font-size: 1rem; }
+
+  .total-bar-btn {
+    padding: 7px 14px;
+    font-size: 0.85rem;
+    min-width: auto;
+  }
+
+  .footer-inner {
+    grid-template-columns: 1fr;
+    gap: 24px;
+    text-align: center;
   }
 
   .cart-item {
@@ -1052,12 +1293,44 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   .container { padding: 12px 10px; }
 
   .product-grid {
-    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    grid-template-columns: repeat(2, 1fr);
     gap: 10px;
   }
 
-  .product-card-body { padding: 12px; }
-  .product-card-img { height: 150px; }
+  .product-card-body { padding: 10px; }
+  .product-card-img { height: 130px; }
+
+  .product-card-name { font-size: 0.95rem; }
+  .product-card-name-ta { font-size: 0.78rem; margin-bottom: 8px; }
+
+  .product-card-prices {
+    padding: 8px;
+    margin-bottom: 10px;
+  }
+
+  .price-new { font-size: 1.15rem; }
+  .price-old { font-size: 0.75rem; }
+  .price-offer { font-size: 0.65rem; padding: 1px 6px; }
+
+  .qty-stepper {
+    padding-top: 8px;
+  }
+
+  .qty-stepper .qty-btn {
+    width: 34px;
+    height: 36px;
+    flex: 0 0 34px;
+    font-size: 1.1rem;
+  }
+
+  .qty-stepper .product-qty {
+    width: 48px;
+    flex: 0 0 48px;
+    height: 36px;
+    font-size: 0.95rem;
+  }
+
+  .product-card-subtotal { font-size: 0.8rem; }
 
   .product-card-actions {
     flex-direction: column;
@@ -1069,6 +1342,16 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 
   .product-card-actions .btn {
     width: 100%;
+  }
+
+  .total-bar-btn {
+    padding: 6px 10px;
+    font-size: 0.8rem;
+  }
+
+  .site-footer {
+    padding: 28px 14px 0;
+    margin-top: 24px;
   }
 
   .cart-item {

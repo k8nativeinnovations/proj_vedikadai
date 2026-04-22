@@ -6,112 +6,20 @@ if (!isset($_SESSION['cart'])) {
     $_SESSION['cart'] = [];
 }
 
-/* ---------- AJAX ADD TO CART ---------- */
-if (isset($_POST['ajax_add_to_cart'])) {
-    header('Content-Type: application/json');
-
-    $product_id = (int)$_POST['product_id'];
-    $quantity   = (int)$_POST['quantity'];
-
-    if ($product_id <= 0 || $quantity <= 0) {
-        echo json_encode(['success' => false, 'message' => 'Please select at least 1 item.']);
-        exit();
-    }
-
-    $stmt = mysqli_prepare(
-        $conn,
-        "SELECT id, name_en, name_ta, old_price, offer, new_price, image
-         FROM products WHERE id = ? LIMIT 1"
-    );
-    mysqli_stmt_bind_param($stmt, "i", $product_id);
-    mysqli_stmt_execute($stmt);
-    $res = mysqli_stmt_get_result($stmt);
-
-    if ($product = mysqli_fetch_assoc($res)) {
-        // Merge quantities if product already in cart
-        $found = false;
-        foreach ($_SESSION['cart'] as &$cartItem) {
-            if ($cartItem['product_id'] == $product['id']) {
-                $cartItem['qty'] += $quantity;
-                $cartItem['total'] = (float)$cartItem['price'] * $cartItem['qty'];
-                $found = true;
-                break;
-            }
-        }
-        unset($cartItem);
-
-        if (!$found) {
-            $_SESSION['cart'][] = [
-                'product_id' => $product['id'],
-                'name'       => $product['name_en'],
-                'price'      => (float)$product['new_price'],
-                'image'      => $product['image'],
-                'qty'        => $quantity,
-                'total'      => (float)$product['new_price'] * $quantity,
-                'unique_id'  => time() . rand(100, 999)
-            ];
-        }
-
-        echo json_encode([
-            'success'    => true,
-            'message'    => htmlspecialchars($product['name_en']) . ' added to cart!',
-            'cart_count' => count($_SESSION['cart'])
-        ]);
-    } else {
-        echo json_encode(['success' => false, 'message' => 'Product not found.']);
-    }
-    exit();
-}
-
-/* ---------- FALLBACK: Regular POST add to cart ---------- */
-$addedMessage = "";
-if (isset($_POST['add_to_cart'])) {
-    $product_id = (int)$_POST['product_id'];
-    $quantity   = (int)$_POST['quantity'];
-
-    if ($product_id > 0 && $quantity > 0) {
-        $stmt = mysqli_prepare(
-            $conn,
-            "SELECT id, name_en, name_ta, old_price, offer, new_price, image
-             FROM products WHERE id = ? LIMIT 1"
-        );
-        mysqli_stmt_bind_param($stmt, "i", $product_id);
-        mysqli_stmt_execute($stmt);
-        $res = mysqli_stmt_get_result($stmt);
-
-        if ($product = mysqli_fetch_assoc($res)) {
-            $found = false;
-            foreach ($_SESSION['cart'] as &$cartItem) {
-                if ($cartItem['product_id'] == $product['id']) {
-                    $cartItem['qty'] += $quantity;
-                    $cartItem['total'] = (float)$cartItem['price'] * $cartItem['qty'];
-                    $found = true;
-                    break;
-                }
-            }
-            unset($cartItem);
-
-            if (!$found) {
-                $_SESSION['cart'][] = [
-                    'product_id' => $product['id'],
-                    'name'       => $product['name_en'],
-                    'price'      => (float)$product['new_price'],
-                    'image'      => $product['image'],
-                    'qty'        => $quantity,
-                    'total'      => (float)$product['new_price'] * $quantity,
-                    'unique_id'  => time() . rand(100, 999)
-                ];
-            }
-            $addedMessage = htmlspecialchars($product['name_en']) . " added to cart!";
-        }
-    }
-}
-
 /* ---------- FETCH PRODUCTS ---------- */
 $data = [];
 $result = mysqli_query($conn, "SELECT * FROM products ORDER BY id ASC");
 while ($row = mysqli_fetch_assoc($result)) {
     $data[] = $row;
+}
+
+/* ---------- MAP EXISTING CART QTYS BY PRODUCT ---------- */
+$cartQtyMap = [];
+$cartItemCount = 0;
+foreach ($_SESSION['cart'] as $item) {
+    $pid = (int)$item['product_id'];
+    $cartQtyMap[$pid] = ($cartQtyMap[$pid] ?? 0) + (int)$item['qty'];
+    $cartItemCount += (int)$item['qty'];
 }
 
 $cartCount = count($_SESSION['cart']);
@@ -157,22 +65,25 @@ $cartCount = count($_SESSION['cart']);
   </div>
 </header>
 
-<!-- Announcement Bar (replaces deprecated marquee) -->
+<!-- Announcement Bar -->
 <div class="announce-bar" role="banner">
   Welcome to Thiruchendur Murugan Vedikadai — Quality crackers at the best prices!
 </div>
 
-<!-- Toast Container for AJAX notifications -->
-<div class="toast-container" id="toast-container" aria-live="polite"></div>
+<?php if (count($data) > 0): ?>
+<!-- Sticky Top Total Bar -->
+<div class="total-bar total-bar--top" id="total-bar-top">
+  <div class="total-bar-inner">
+    <span class="total-bar-items"><strong id="top-items-count">0</strong> items</span>
+    <span class="total-bar-amount">Total: <strong><?php echo CURRENCY_SYMBOL; ?> <span id="top-total-amount">0.00</span></strong></span>
+    <button type="submit" form="bulk-order-form" class="btn btn--primary total-bar-btn" id="top-view-cart" disabled>
+      View Cart
+    </button>
+  </div>
+</div>
+<?php endif; ?>
 
 <main class="container">
-
-  <!-- Search Bar -->
-  <div class="search-bar mb-2">
-    <input type="search" class="search-input" id="product-search"
-           placeholder="Search products by name..." aria-label="Search products by name">
-    <span class="product-count" id="product-count"><?php echo count($data); ?> products</span>
-  </div>
 
   <?php if (count($data) === 0): ?>
   <!-- Empty State -->
@@ -183,131 +94,212 @@ $cartCount = count($_SESSION['cart']);
   </div>
 
   <?php else: ?>
-  <!-- Product Grid -->
-  <div class="product-grid" id="product-grid">
 
-    <?php foreach ($data as $i => $item): ?>
-    <article class="product-card" data-name="<?php echo htmlspecialchars(strtolower($item['name_en'] . ' ' . $item['name_ta'])); ?>">
-      <img src="<?php echo htmlspecialchars($item['image']); ?>"
-           alt="<?php echo htmlspecialchars($item['name_en']); ?>"
-           class="product-card-img"
-           loading="lazy"
-           onerror="this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22><rect fill=%22%23f0f0f0%22 width=%22200%22 height=%22200%22/><text x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23999%22 font-size=%2214%22>No Image</text></svg>'">
-
-      <div class="product-card-body">
-        <h3 class="product-card-name"><?php echo htmlspecialchars($item['name_en']); ?></h3>
-        <p class="product-card-name-ta" lang="ta"><?php echo htmlspecialchars($item['name_ta']); ?></p>
-
-        <div class="product-card-prices">
-          <span class="price-old"><?php echo CURRENCY_SYMBOL . ' ' . number_format($item['old_price'], 2); ?></span>
-          <span class="price-offer"><?php echo intval($item['offer']); ?>% OFF</span>
-          <span class="price-new"><?php echo CURRENCY_SYMBOL . ' ' . number_format($item['new_price'], 2); ?></span>
-        </div>
-
-        <form class="product-card-actions add-to-cart-form" method="POST">
-          <input type="hidden" name="product_id" value="<?php echo (int)$item['id']; ?>">
-          <label for="qty-<?php echo (int)$item['id']; ?>" class="sr-only">Quantity</label>
-          <input type="number" id="qty-<?php echo (int)$item['id']; ?>"
-                 name="quantity" min="1" value="1"
-                 class="qty-input" aria-label="Quantity for <?php echo htmlspecialchars($item['name_en']); ?>">
-          <button type="submit" name="add_to_cart" class="btn btn--primary btn--add-to-cart">
-            Add to Cart
-          </button>
-        </form>
-      </div>
-    </article>
-    <?php endforeach; ?>
-
+  <!-- Search Bar -->
+  <div class="search-bar mb-2">
+    <input type="search" class="search-input" id="product-search"
+           placeholder="Search products by name..." aria-label="Search products by name">
+    <span class="product-count" id="product-count"><?php echo count($data); ?> products</span>
   </div>
+
+  <!-- Bulk Order Form: one form wraps all products -->
+  <form id="bulk-order-form" action="cart_checkout.php" method="POST">
+    <input type="hidden" name="bulk_add_to_cart" value="1">
+
+    <div class="product-grid" id="product-grid">
+      <?php foreach ($data as $item):
+        $pid = (int)$item['id'];
+        $existingQty = (int)($cartQtyMap[$pid] ?? 0);
+      ?>
+      <article class="product-card" data-name="<?php echo htmlspecialchars(strtolower($item['name_en'] . ' ' . $item['name_ta'])); ?>">
+        <img src="<?php echo htmlspecialchars($item['image']); ?>"
+             alt="<?php echo htmlspecialchars($item['name_en']); ?>"
+             class="product-card-img"
+             loading="lazy"
+             onerror="this.onerror=null;this.src='data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 200 200%22><rect fill=%22%23f0f0f0%22 width=%22200%22 height=%22200%22/><text x=%2250%25%22 y=%2250%25%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%23999%22 font-size=%2214%22>No Image</text></svg>'">
+
+        <div class="product-card-body">
+          <h3 class="product-card-name"><?php echo htmlspecialchars($item['name_en']); ?></h3>
+          <p class="product-card-name-ta" lang="ta"><?php echo htmlspecialchars($item['name_ta']); ?></p>
+
+          <div class="product-card-prices">
+            <span class="price-old"><?php echo CURRENCY_SYMBOL . ' ' . number_format($item['old_price'], 2); ?></span>
+            <span class="price-offer"><?php echo intval($item['offer']); ?>% OFF</span>
+            <span class="price-new"><?php echo CURRENCY_SYMBOL . ' ' . number_format($item['new_price'], 2); ?></span>
+          </div>
+
+          <div class="qty-stepper">
+            <button type="button" class="qty-btn qty-minus" aria-label="Decrease quantity" data-target="qty-<?php echo $pid; ?>">&minus;</button>
+            <label for="qty-<?php echo $pid; ?>" class="sr-only">Quantity</label>
+            <input type="number"
+                   id="qty-<?php echo $pid; ?>"
+                   name="qty[<?php echo $pid; ?>]"
+                   class="qty-input product-qty"
+                   min="0"
+                   value="<?php echo $existingQty; ?>"
+                   data-price="<?php echo (float)$item['new_price']; ?>"
+                   aria-label="Quantity for <?php echo htmlspecialchars($item['name_en']); ?>">
+            <button type="button" class="qty-btn qty-plus" aria-label="Increase quantity" data-target="qty-<?php echo $pid; ?>">+</button>
+          </div>
+
+          <div class="product-card-subtotal" id="subtotal-<?php echo $pid; ?>" aria-live="polite">
+            <?php if ($existingQty > 0): ?>
+              Subtotal: <strong><?php echo CURRENCY_SYMBOL . ' ' . number_format($item['new_price'] * $existingQty, 2); ?></strong>
+            <?php endif; ?>
+          </div>
+        </div>
+      </article>
+      <?php endforeach; ?>
+    </div>
+  </form>
+
   <?php endif; ?>
 
 </main>
 
+<?php if (count($data) > 0): ?>
+<!-- Sticky Bottom Total Bar (also visible on mobile) -->
+<div class="total-bar total-bar--bottom" id="total-bar-bottom">
+  <div class="total-bar-inner">
+    <span class="total-bar-items"><strong id="bottom-items-count">0</strong> items</span>
+    <span class="total-bar-amount">Total: <strong><?php echo CURRENCY_SYMBOL; ?> <span id="bottom-total-amount">0.00</span></strong></span>
+    <button type="submit" form="bulk-order-form" class="btn btn--primary total-bar-btn" id="bottom-view-cart" disabled>
+      View Cart
+    </button>
+  </div>
+</div>
+<?php endif; ?>
+
+<!-- Footer -->
+<footer class="site-footer">
+  <div class="footer-inner">
+    <div class="footer-col">
+      <h3>Murugan Vedikadai</h3>
+      <p class="footer-ta" lang="ta">திருச்செந்தூர் முருகன் வெடிகடை</p>
+      <p>Quality crackers at the best prices for every celebration.</p>
+    </div>
+    <div class="footer-col">
+      <h3>Contact</h3>
+      <p><a href="tel:+918610466629">+91 86104 66629</a></p>
+      <p><a href="mailto:thiruchendurmuruganvedikadai@gmail.com">thiruchendurmuruganvedikadai@gmail.com</a></p>
+    </div>
+    <div class="footer-col">
+      <h3>Quick Links</h3>
+      <ul class="footer-links">
+        <li><a href="index.php">Shop</a></li>
+        <li><a href="cart_checkout.php">Cart</a></li>
+        <li><a href="admin_login.php">Admin</a></li>
+      </ul>
+    </div>
+  </div>
+  <div class="footer-bottom">
+    <p>&copy; <?php echo date('Y'); ?> Thiruchendur Murugan Vedikadai. All rights reserved.</p>
+  </div>
+</footer>
+
 <script>
-/* --- Search/Filter --- */
 (function() {
-  var searchInput = document.getElementById('product-search');
-  var grid = document.getElementById('product-grid');
-  var countEl = document.getElementById('product-count');
+  var form = document.getElementById('bulk-order-form');
+  if (!form) return;
 
-  if (!searchInput || !grid) return;
+  var qtyInputs = form.querySelectorAll('.product-qty');
+  var topItems   = document.getElementById('top-items-count');
+  var topTotal   = document.getElementById('top-total-amount');
+  var topBtn     = document.getElementById('top-view-cart');
+  var botItems   = document.getElementById('bottom-items-count');
+  var botTotal   = document.getElementById('bottom-total-amount');
+  var botBtn     = document.getElementById('bottom-view-cart');
 
-  searchInput.addEventListener('input', function() {
-    var query = this.value.toLowerCase().trim();
-    var cards = grid.querySelectorAll('.product-card');
-    var visible = 0;
+  function formatMoney(n) {
+    return n.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  }
 
-    cards.forEach(function(card) {
-      var name = card.getAttribute('data-name') || '';
-      if (!query || name.indexOf(query) !== -1) {
-        card.style.display = '';
-        visible++;
-      } else {
-        card.style.display = 'none';
+  function recalc() {
+    var totalItems = 0;
+    var totalAmt = 0;
+    qtyInputs.forEach(function(inp) {
+      var q = parseInt(inp.value, 10);
+      if (isNaN(q) || q < 0) q = 0;
+      var price = parseFloat(inp.getAttribute('data-price')) || 0;
+      totalItems += q;
+      totalAmt += price * q;
+
+      var pid = inp.id.replace('qty-', '');
+      var sub = document.getElementById('subtotal-' + pid);
+      if (sub) {
+        if (q > 0) {
+          sub.innerHTML = 'Subtotal: <strong><?php echo CURRENCY_SYMBOL; ?> ' + formatMoney(price * q) + '</strong>';
+        } else {
+          sub.innerHTML = '';
+        }
+      }
+
+      // Highlight active cards
+      var card = inp.closest('.product-card');
+      if (card) {
+        if (q > 0) card.classList.add('is-active'); else card.classList.remove('is-active');
       }
     });
 
-    if (countEl) {
-      countEl.textContent = visible + ' product' + (visible !== 1 ? 's' : '');
-    }
+    if (topItems) topItems.textContent = totalItems;
+    if (topTotal) topTotal.textContent = formatMoney(totalAmt);
+    if (botItems) botItems.textContent = totalItems;
+    if (botTotal) botTotal.textContent = formatMoney(totalAmt);
+
+    var disabled = totalItems === 0;
+    if (topBtn) topBtn.disabled = disabled;
+    if (botBtn) botBtn.disabled = disabled;
+  }
+
+  // Stepper buttons (event delegation)
+  form.addEventListener('click', function(e) {
+    var target = e.target;
+    if (!target.classList.contains('qty-plus') && !target.classList.contains('qty-minus')) return;
+    var id = target.getAttribute('data-target');
+    var inp = document.getElementById(id);
+    if (!inp) return;
+    var q = parseInt(inp.value, 10);
+    if (isNaN(q) || q < 0) q = 0;
+    if (target.classList.contains('qty-plus')) q += 1;
+    else q = Math.max(0, q - 1);
+    inp.value = q;
+    recalc();
   });
-})();
 
-/* --- Toast Notification --- */
-function showToast(message, isError) {
-  var container = document.getElementById('toast-container');
-  var toast = document.createElement('div');
-  toast.className = 'toast';
-  if (isError) toast.style.background = '#dc3545';
-  toast.textContent = message;
-  container.appendChild(toast);
-  setTimeout(function() { toast.remove(); }, 3000);
-}
-
-/* --- AJAX Add to Cart (no page reload) --- */
-(function() {
-  var forms = document.querySelectorAll('.add-to-cart-form');
-
-  forms.forEach(function(form) {
-    form.addEventListener('submit', function(e) {
-      e.preventDefault();
-      var btn = form.querySelector('button[type="submit"]');
-      var originalText = btn.textContent;
-      btn.disabled = true;
-      btn.textContent = 'Adding...';
-
-      var formData = new FormData(form);
-      formData.append('ajax_add_to_cart', '1');
-
-      fetch('index.php', {
-        method: 'POST',
-        body: formData
-      })
-      .then(function(res) { return res.json(); })
-      .then(function(data) {
-        if (data.success) {
-          showToast(data.message);
-          var badge = document.getElementById('cart-badge');
-          if (badge) badge.textContent = data.cart_count;
-          form.querySelector('input[name="quantity"]').value = 1;
-        } else {
-          showToast(data.message, true);
-        }
-      })
-      .catch(function() {
-        showToast('Something went wrong. Please try again.', true);
-      })
-      .finally(function() {
-        btn.disabled = false;
-        btn.textContent = originalText;
-      });
+  // Manual typing
+  qtyInputs.forEach(function(inp) {
+    inp.addEventListener('input', recalc);
+    inp.addEventListener('change', function() {
+      var q = parseInt(inp.value, 10);
+      if (isNaN(q) || q < 0) inp.value = 0;
+      recalc();
     });
   });
-})();
 
-<?php if ($addedMessage): ?>
-showToast('<?php echo addslashes($addedMessage); ?>');
-<?php endif; ?>
+  recalc();
+
+  // Search filter
+  var searchInput = document.getElementById('product-search');
+  var grid = document.getElementById('product-grid');
+  var countEl = document.getElementById('product-count');
+  if (searchInput && grid) {
+    searchInput.addEventListener('input', function() {
+      var query = this.value.toLowerCase().trim();
+      var cards = grid.querySelectorAll('.product-card');
+      var visible = 0;
+      cards.forEach(function(card) {
+        var name = card.getAttribute('data-name') || '';
+        if (!query || name.indexOf(query) !== -1) {
+          card.style.display = '';
+          visible++;
+        } else {
+          card.style.display = 'none';
+        }
+      });
+      if (countEl) countEl.textContent = visible + ' product' + (visible !== 1 ? 's' : '');
+    });
+  }
+})();
 </script>
 
 </body>
