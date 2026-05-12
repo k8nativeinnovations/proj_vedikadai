@@ -99,6 +99,14 @@ $cartCount = count($_SESSION['cart']);
   <div class="search-bar mb-2">
     <input type="search" class="search-input" id="product-search"
            placeholder="Search products by name..." aria-label="Search products by name">
+    <div class="view-toggle" role="group" aria-label="View mode">
+      <button type="button" class="view-toggle-btn is-active" data-view="list" id="view-list-btn" aria-pressed="true" title="List view">
+        <span aria-hidden="true">&#9776;</span> List
+      </button>
+      <button type="button" class="view-toggle-btn" data-view="grid" id="view-grid-btn" aria-pressed="false" title="Grid view">
+        <span aria-hidden="true">&#9783;</span> Grid
+      </button>
+    </div>
     <span class="product-count" id="product-count"><?php echo count($data); ?> products</span>
   </div>
 
@@ -106,7 +114,7 @@ $cartCount = count($_SESSION['cart']);
   <form id="bulk-order-form" action="cart_checkout.php" method="POST">
     <input type="hidden" name="bulk_add_to_cart" value="1">
 
-    <div class="product-grid" id="product-grid">
+    <div class="product-grid view-list" id="product-grid">
       <?php foreach ($data as $item):
         $pid = (int)$item['id'];
         $existingQty = (int)($cartQtyMap[$pid] ?? 0);
@@ -278,9 +286,33 @@ $cartCount = count($_SESSION['cart']);
 
   recalc();
 
+  // View toggle (list / grid) — default: list
+  var grid = document.getElementById('product-grid');
+  var listBtn = document.getElementById('view-list-btn');
+  var gridBtn = document.getElementById('view-grid-btn');
+  function applyView(mode) {
+    if (!grid) return;
+    if (mode === 'grid') {
+      grid.classList.remove('view-list');
+      grid.classList.add('view-grid');
+      if (gridBtn) { gridBtn.classList.add('is-active'); gridBtn.setAttribute('aria-pressed', 'true'); }
+      if (listBtn) { listBtn.classList.remove('is-active'); listBtn.setAttribute('aria-pressed', 'false'); }
+    } else {
+      grid.classList.add('view-list');
+      grid.classList.remove('view-grid');
+      if (listBtn) { listBtn.classList.add('is-active'); listBtn.setAttribute('aria-pressed', 'true'); }
+      if (gridBtn) { gridBtn.classList.remove('is-active'); gridBtn.setAttribute('aria-pressed', 'false'); }
+    }
+    try { localStorage.setItem('mv_view_mode', mode); } catch (e) {}
+  }
+  var savedView = 'list';
+  try { savedView = localStorage.getItem('mv_view_mode') || 'list'; } catch (e) {}
+  applyView(savedView);
+  if (listBtn) listBtn.addEventListener('click', function() { applyView('list'); });
+  if (gridBtn) gridBtn.addEventListener('click', function() { applyView('grid'); });
+
   // Search filter
   var searchInput = document.getElementById('product-search');
-  var grid = document.getElementById('product-grid');
   var countEl = document.getElementById('product-count');
   if (searchInput && grid) {
     searchInput.addEventListener('input', function() {

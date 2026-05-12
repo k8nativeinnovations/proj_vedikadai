@@ -877,6 +877,40 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   font-size: 0.9rem;
 }
 
+.payment-qr-block {
+  background: #fff8ec;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 20px;
+  margin: 20px auto;
+  max-width: 360px;
+  box-shadow: var(--shadow);
+}
+
+.payment-qr-block h3 {
+  margin: 0 0 12px;
+  color: var(--primary);
+  font-size: 1.1rem;
+}
+
+.payment-qr-img {
+  width: 240px;
+  height: 240px;
+  max-width: 100%;
+  object-fit: contain;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: #fff;
+  padding: 8px;
+}
+
+.payment-qr-note {
+  margin: 12px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
 .order-delivery-info {
   background: #f0f9f0;
   border: 2px solid var(--success);
@@ -1129,6 +1163,69 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
   margin-bottom: 16px;
 }
 
+/* --- Flash Banners (success / error / info) --- */
+.flash-banner {
+  max-width: 880px;
+  margin: 0 auto 16px;
+  padding: 14px 20px;
+  border-radius: var(--radius-sm);
+  font-weight: 600;
+  font-size: 0.95rem;
+  border-left: 5px solid;
+  box-shadow: var(--shadow);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: flash-in 0.25s ease-out;
+}
+
+/* Top-of-page banners stick to the top so users can't miss them */
+main.container > .flash-banner {
+  position: sticky;
+  top: calc(var(--nav-height) + 8px);
+  z-index: 800;
+  max-width: 100%;
+}
+
+.flash-banner::before {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.flash-success {
+  background: #e8f7ee;
+  color: var(--success-dark);
+  border-left-color: var(--success);
+}
+.flash-success::before { content: "\2714"; }
+
+.flash-error {
+  background: #fde8e8;
+  color: var(--danger-dark);
+  border-left-color: var(--danger);
+}
+.flash-error::before { content: "\26A0"; }
+
+.flash-info {
+  background: #e8f1ff;
+  color: #0040b3;
+  border-left-color: var(--info);
+}
+.flash-info::before { content: "\2139"; }
+
+@keyframes flash-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* --- Form hint text --- */
+.form-hint {
+  display: block;
+  margin-top: 4px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
 /* --- Search / Filter Bar --- */
 .search-bar {
   display: flex;
@@ -1161,6 +1258,180 @@ a:focus-visible, button:focus-visible, input:focus-visible, textarea:focus-visib
 .product-count {
   color: var(--text-muted);
   font-size: 0.9rem;
+}
+
+/* --- View Toggle (List / Grid) --- */
+.view-toggle {
+  display: inline-flex;
+  border: 2px solid var(--border);
+  border-radius: 24px;
+  overflow: hidden;
+  background: var(--bg-card);
+}
+
+.view-toggle-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 14px;
+  background: transparent;
+  border: none;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.view-toggle-btn + .view-toggle-btn {
+  border-left: 1px solid var(--border);
+}
+
+.view-toggle-btn:hover {
+  color: var(--primary);
+}
+
+.view-toggle-btn.is-active {
+  background: var(--primary);
+  color: var(--text-light);
+}
+
+/* --- List View (default) --- */
+.product-grid.view-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.product-grid.view-list .product-card {
+  flex-direction: row;
+  align-items: stretch;
+  padding: 10px;
+  gap: 14px;
+}
+
+.product-grid.view-list .product-card:hover {
+  transform: none;
+}
+
+.product-grid.view-list .product-card-img {
+  width: 110px;
+  height: 110px;
+  flex: 0 0 110px;
+  border-radius: var(--radius-sm);
+  align-self: center;
+}
+
+.product-grid.view-list .product-card-body {
+  padding: 0;
+  flex: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  grid-template-rows: auto auto;
+  align-items: center;
+  column-gap: 16px;
+  row-gap: 4px;
+}
+
+.product-grid.view-list .product-card-name {
+  grid-column: 1;
+  grid-row: 1;
+  font-size: 1.1rem;
+  margin: 0;
+  align-self: end;
+}
+
+.product-grid.view-list .product-card-name-ta {
+  grid-column: 1;
+  grid-row: 2;
+  margin: 0;
+  align-self: start;
+}
+
+.product-grid.view-list .product-card-prices {
+  grid-column: 2;
+  grid-row: 1 / span 2;
+  margin: 0;
+  padding: 8px 14px;
+  text-align: center;
+  min-width: 140px;
+  align-self: center;
+}
+
+.product-grid.view-list .price-old { font-size: 0.8rem; }
+.product-grid.view-list .price-offer { font-size: 0.65rem; padding: 1px 6px; }
+.product-grid.view-list .price-new {
+  font-size: 1.25rem;
+  margin-top: 2px;
+}
+
+.product-grid.view-list .qty-stepper {
+  grid-column: 3;
+  grid-row: 1 / span 2;
+  padding: 0;
+  border-top: none;
+  margin: 0;
+  align-self: center;
+}
+
+.product-grid.view-list .product-card-subtotal {
+  display: none;
+}
+
+.product-grid.view-list .product-card.is-active .product-card-subtotal {
+  display: block;
+  position: absolute;
+  bottom: 6px;
+  right: 14px;
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.product-grid.view-list .product-card {
+  position: relative;
+}
+
+@media (max-width: 768px) {
+  .product-grid.view-list .product-card {
+    padding: 8px;
+    gap: 10px;
+  }
+  .product-grid.view-list .product-card-img {
+    width: 80px;
+    height: 80px;
+    flex: 0 0 80px;
+  }
+  .product-grid.view-list .product-card-body {
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+    row-gap: 6px;
+  }
+  .product-grid.view-list .product-card-name {
+    font-size: 0.95rem;
+  }
+  .product-grid.view-list .product-card-name-ta {
+    font-size: 0.78rem;
+  }
+  .product-grid.view-list .product-card-prices {
+    grid-column: 1;
+    grid-row: 3;
+    text-align: left;
+    padding: 6px 10px;
+    min-width: 0;
+  }
+  .product-grid.view-list .price-new { font-size: 1.05rem; }
+  .product-grid.view-list .qty-stepper {
+    grid-column: 2;
+    grid-row: 3;
+    align-self: center;
+  }
+  .product-grid.view-list .product-card.is-active .product-card-subtotal {
+    position: static;
+    text-align: right;
+    grid-column: 1 / -1;
+    grid-row: 4;
+  }
 }
 
 /* --- Utility --- */

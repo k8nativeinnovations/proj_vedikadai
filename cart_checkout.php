@@ -61,9 +61,14 @@ if (isset($_POST['update_cart'])) {
         }
     }
     unset($item);
+    $_SESSION['flash'] = ['type' => 'success', 'msg' => 'Cart updated successfully.'];
     header("Location: cart_checkout.php");
     exit();
 }
+
+/* PULL + CLEAR ONE-SHOT FLASH MESSAGE */
+$flash = $_SESSION['flash'] ?? null;
+unset($_SESSION['flash']);
 
 /* CALCULATE TOTAL */
 $total = 0;
@@ -71,73 +76,107 @@ foreach ($_SESSION['cart'] as $item) {
     $total += $item['price'] * $item['qty'];
 }
 
+/* Preserve form values across a failed POST.
+   When the form has never been submitted yet, prefill with test defaults
+   so the developer doesn't have to retype while testing locally. */
+$form = [
+    'name'    => $_POST['name']    ?? 'Vijesh',
+    'email'   => $_POST['email']   ?? 'vijehskrishna115@gmail.com',
+    'phone'   => $_POST['phone']   ?? '9008108650',
+    'pincode' => $_POST['pincode'] ?? '560054',
+    'address' => $_POST['address'] ?? 'mathikere, bangalore',
+];
+
 /* PLACE ORDER */
 $orderSuccess = false;
-$orderData = null;
-$orderItems = [];
+$orderError   = null;
+$orderData    = null;
+$orderItems   = [];
 
-if (isset($_POST['place_order']) && count($_SESSION['cart']) > 0) {
+if (isset($_POST['place_order'])) {
 
-    $name    = trim($_POST['name']);
-    $email   = trim($_POST['email']);
-    $phone   = trim($_POST['phone']);
-    $pincode = trim($_POST['pincode']);
-    $address = trim($_POST['address']);
+    if (count($_SESSION['cart']) === 0) {
+        $orderError = "Your cart is empty. Please add items before placing an order.";
+    } else {
 
-    /* INSERT INTO ORDERS */
-    $orderSql = "INSERT INTO orders
-        (customer_name, email, phone, pincode, shipping_address, total_amount)
-        VALUES (?, ?, ?, ?, ?, ?)";
+    $name    = trim($_POST['name'] ?? '');
+    $email   = trim($_POST['email'] ?? '');
+    $phone   = trim($_POST['phone'] ?? '');
+    $pincode = trim($_POST['pincode'] ?? '');
+    $address = trim($_POST['address'] ?? '');
 
-    $orderStmt = mysqli_prepare($conn, $orderSql);
-    if (!$orderStmt) {
-        die("Order Prepare Failed: " . mysqli_error($conn));
-    }
+    /* Server-side validation */
+    if ($name === '' || $email === '' || $phone === '' || $pincode === '' || $address === '') {
+        $orderError = "Please fill in all delivery fields.";
+    } elseif (!preg_match('/^[6-9][0-9]{9}$/', $phone)) {
+        $orderError = "Phone number must be a 10-digit Indian mobile number.";
+    } elseif (!preg_match('/^[0-9]{6}$/', $pincode)) {
+        $orderError = "Pincode must be exactly 6 digits.";
+    } elseif (!filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $orderError = "Please enter a valid email address.";
+    } else {
 
-    mysqli_stmt_bind_param(
-        $orderStmt, "sssssd",
-        $name, $email, $phone, $pincode, $address, $total
-    );
-    mysqli_stmt_execute($orderStmt);
+    mysqli_begin_transaction($conn);
+    try {
+        $orderSql = "INSERT INTO orders
+            (customer_name, email, phone, pincode, shipping_address, total_amount)
+            VALUES (?, ?, ?, ?, ?, ?)";
 
-    $order_id = mysqli_insert_id($conn);
-    mysqli_stmt_close($orderStmt);
-
-    /* INSERT ORDER ITEMS */
-    $itemSql = "INSERT INTO order_items
-        (order_id, product_id, quantity, price)
-        VALUES (?, ?, ?, ?)";
-
-    $itemStmt = mysqli_prepare($conn, $itemSql);
-    if (!$itemStmt) {
-        die("Item Prepare Failed: " . mysqli_error($conn));
-    }
-
-    // Save items for confirmation display
-    $orderItems = $_SESSION['cart'];
-
-    foreach ($_SESSION['cart'] as $item) {
+        $orderStmt = mysqli_prepare($conn, $orderSql);
+        if (!$orderStmt) {
+            throw new Exception("Order prepare failed: " . mysqli_error($conn));
+        }
         mysqli_stmt_bind_param(
-            $itemStmt, "iiid",
-            $order_id, $item['product_id'], $item['qty'], $item['price']
+            $orderStmt, "sssssd",
+            $name, $email, $phone, $pincode, $address, $total
         );
-        mysqli_stmt_execute($itemStmt);
+        if (!mysqli_stmt_execute($orderStmt)) {
+            throw new Exception("Order insert failed: " . mysqli_stmt_error($orderStmt));
+        }
+        $order_id = mysqli_insert_id($conn);
+        mysqli_stmt_close($orderStmt);
+
+        $itemSql = "INSERT INTO order_items
+            (order_id, product_id, quantity, price)
+            VALUES (?, ?, ?, ?)";
+        $itemStmt = mysqli_prepare($conn, $itemSql);
+        if (!$itemStmt) {
+            throw new Exception("Item prepare failed: " . mysqli_error($conn));
+        }
+
+        $orderItems = $_SESSION['cart'];
+        foreach ($_SESSION['cart'] as $item) {
+            mysqli_stmt_bind_param(
+                $itemStmt, "iiid",
+                $order_id, $item['product_id'], $item['qty'], $item['price']
+            );
+            if (!mysqli_stmt_execute($itemStmt)) {
+                throw new Exception("Item insert failed: " . mysqli_stmt_error($itemStmt));
+            }
+        }
+        mysqli_stmt_close($itemStmt);
+
+        mysqli_commit($conn);
+
+        $orderData = [
+            'id'      => $order_id,
+            'name'    => $name,
+            'email'   => $email,
+            'phone'   => $phone,
+            'pincode' => $pincode,
+            'address' => $address,
+            'total'   => $total
+        ];
+
+        $_SESSION['cart'] = [];
+        $orderSuccess = true;
+    } catch (Exception $e) {
+        mysqli_rollback($conn);
+        $orderError = $e->getMessage();
+        error_log("[place_order] " . $orderError);
     }
-
-    mysqli_stmt_close($itemStmt);
-
-    $orderData = [
-        'id'      => $order_id,
-        'name'    => $name,
-        'email'   => $email,
-        'phone'   => $phone,
-        'pincode' => $pincode,
-        'address' => $address,
-        'total'   => $total
-    ];
-
-    $_SESSION['cart'] = [];
-    $orderSuccess = true;
+    } // end else (validation passed)
+    } // end else (cart not empty)
 }
 
 $cartCount = count($_SESSION['cart']);
@@ -174,12 +213,33 @@ $cartCount = count($_SESSION['cart']);
 
 <main class="container">
 
+<?php if ($flash): ?>
+<div class="flash-banner flash-<?php echo htmlspecialchars($flash['type']); ?>" role="status">
+  <?php echo htmlspecialchars($flash['msg']); ?>
+</div>
+<?php endif; ?>
+
+<?php if ($orderError): ?>
+<div class="flash-banner flash-error" role="alert">
+  <strong>Order could not be placed.</strong> <?php echo htmlspecialchars($orderError); ?>
+</div>
+<?php endif; ?>
+
 <?php if ($orderSuccess && $orderData): ?>
 <!-- ========== ORDER CONFIRMATION ========== -->
 <div class="order-success">
   <div class="order-success-icon" aria-hidden="true">&#x1F389;</div>
   <h2>Order Placed Successfully!</h2>
   <p class="order-number">Order #<?php echo (int)$orderData['id']; ?></p>
+
+  <?php $paymentQr = get_setting('payment_qr_image'); ?>
+  <?php if ($paymentQr && file_exists($paymentQr)): ?>
+  <div class="payment-qr-block">
+    <h3>Scan to Pay <?php echo CURRENCY_SYMBOL . ' ' . number_format($orderData['total'], 2); ?></h3>
+    <img src="<?php echo htmlspecialchars($paymentQr); ?>" alt="Payment QR Code" class="payment-qr-img">
+    <p class="payment-qr-note">After payment, please share the screenshot with us on <a href="tel:+918610466629">+91 86104 66629</a>.</p>
+  </div>
+  <?php endif; ?>
 
   <!-- Order Summary -->
   <table class="order-summary-table">
@@ -285,17 +345,30 @@ $cartCount = count($_SESSION['cart']);
 <section class="checkout-section">
   <h2>Delivery Details</h2>
 
+  <?php if ($orderError): ?>
+  <div class="flash-banner flash-error" role="alert" style="margin-bottom:18px;">
+    <strong>Order could not be placed.</strong> <?php echo htmlspecialchars($orderError); ?>
+  </div>
+  <?php endif; ?>
+  <?php if ($flash && $flash['type'] === 'success'): ?>
+  <div class="flash-banner flash-success" role="status" style="margin-bottom:18px;">
+    <?php echo htmlspecialchars($flash['msg']); ?>
+  </div>
+  <?php endif; ?>
+
   <form method="POST" id="checkout-form">
     <div class="form-row">
       <div class="form-group">
         <label for="checkout-name">Full Name</label>
         <input type="text" id="checkout-name" name="name" class="form-input" required
-               autocomplete="name" minlength="2" placeholder="Your full name">
+               autocomplete="name" minlength="2" placeholder="Your full name"
+               value="<?php echo htmlspecialchars($form['name']); ?>">
       </div>
       <div class="form-group">
         <label for="checkout-email">Email</label>
         <input type="email" id="checkout-email" name="email" class="form-input" required
-               autocomplete="email" placeholder="your@email.com">
+               autocomplete="email" placeholder="your@email.com"
+               value="<?php echo htmlspecialchars($form['email']); ?>">
       </div>
     </div>
 
@@ -303,14 +376,20 @@ $cartCount = count($_SESSION['cart']);
       <div class="form-group">
         <label for="checkout-phone">Phone Number</label>
         <input type="tel" id="checkout-phone" name="phone" class="form-input" required
-               autocomplete="tel" pattern="[6-9][0-9]{9}" maxlength="10"
-               placeholder="10-digit mobile number">
+               autocomplete="tel" pattern="[6-9][0-9]{9}" maxlength="10" inputmode="numeric"
+               title="Enter a 10-digit mobile number starting with 6, 7, 8 or 9"
+               placeholder="10-digit mobile number"
+               value="<?php echo htmlspecialchars($form['phone']); ?>">
+        <small class="form-hint">10 digits, starts with 6/7/8/9</small>
       </div>
       <div class="form-group">
         <label for="checkout-pincode">Pincode</label>
         <input type="text" id="checkout-pincode" name="pincode" class="form-input" required
-               autocomplete="postal-code" pattern="[0-9]{6}" maxlength="6"
-               placeholder="6-digit pincode">
+               autocomplete="postal-code" pattern="[0-9]{6}" maxlength="6" inputmode="numeric"
+               title="Enter a 6-digit pincode"
+               placeholder="6-digit pincode"
+               value="<?php echo htmlspecialchars($form['pincode']); ?>">
+        <small class="form-hint">Must be exactly 6 digits</small>
       </div>
     </div>
 
@@ -318,7 +397,7 @@ $cartCount = count($_SESSION['cart']);
       <label for="checkout-address">Full Address</label>
       <textarea id="checkout-address" name="address" class="form-input" required
                 rows="3" minlength="10" autocomplete="street-address"
-                placeholder="House no, street, area, city, state"></textarea>
+                placeholder="House no, street, area, city, state"><?php echo htmlspecialchars($form['address']); ?></textarea>
     </div>
 
     <button type="submit" name="place_order" class="btn btn--primary btn--block btn--lg"
@@ -362,17 +441,65 @@ $cartCount = count($_SESSION['cart']);
 </footer>
 
 <script>
-/* Prevent double-submit on Place Order */
+/* Auto-scroll to any flash/error banner that came back with this page render */
+(function() {
+  var banner = document.querySelector('.flash-banner');
+  if (banner) {
+    window.scrollTo({ top: 0, behavior: 'auto' });
+    banner.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+})();
+
+/* Friendly validation + double-submit guard for Place Order */
 (function() {
   var form = document.getElementById('checkout-form');
   if (!form) return;
-  form.addEventListener('submit', function() {
-    var btn = document.getElementById('place-order-btn');
-    if (btn) {
-      btn.disabled = true;
-      btn.textContent = 'Placing Order...';
-    }
+  var btn = document.getElementById('place-order-btn');
+
+  function fieldLabel(field) {
+    var fg = field.closest('.form-group');
+    if (!fg) return 'A field';
+    var lbl = fg.querySelector('label');
+    return lbl ? lbl.textContent.trim() : 'A field';
+  }
+
+  function flash(msg) {
+    var existing = document.getElementById('client-flash');
+    if (existing) existing.remove();
+    var box = document.createElement('div');
+    box.id = 'client-flash';
+    box.className = 'flash-banner flash-error';
+    box.setAttribute('role', 'alert');
+    box.textContent = msg;
+    var main = document.querySelector('main.container');
+    if (main) main.insertBefore(box, main.firstChild);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+
+  form.addEventListener('invalid', function(e) {
+    e.preventDefault();
+    var field = e.target;
+    flash(fieldLabel(field) + ': ' + (field.title || field.validationMessage || 'please check this field.'));
+    field.focus();
+  }, true);
+
+  form.addEventListener('submit', function(e) {
+    if (!form.checkValidity()) { e.preventDefault(); return; }
+    // Defer disabling so the button's name/value is included in the form data.
+    setTimeout(function() {
+      if (btn) {
+        btn.disabled = true;
+        btn.textContent = 'Placing Order...';
+      }
+    }, 0);
   });
+})();
+
+/* Auto-dismiss success flash after 4s */
+(function() {
+  var f = document.querySelector('.flash-success');
+  if (!f) return;
+  setTimeout(function() { f.style.transition = 'opacity .4s'; f.style.opacity = '0'; setTimeout(function(){ f.remove(); }, 400); }, 4000);
 })();
 </script>
 
